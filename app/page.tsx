@@ -15,22 +15,22 @@ export default function Home() {
 
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <Link
-            href="/characters"
-            className="block p-8 rounded-2xl bg-white/5 backdrop-blur-sm border border-rose-500/20 hover:border-rose-500/40 transition-all hover:scale-105"
-          >
-            <h2 className="text-2xl font-bold mb-2">👥 Personnages</h2>
-            <p className="text-rose-200">
-              Créez ou importez vos personnages
-            </p>
-          </Link>
-
-          <Link
             href="/generate"
             className="block p-8 rounded-2xl bg-white/5 backdrop-blur-sm border border-purple-500/20 hover:border-purple-500/40 transition-all hover:scale-105"
           >
             <h2 className="text-2xl font-bold mb-2">🎬 Générer vidéo</h2>
             <p className="text-purple-200">
               Transformez votre résumé en vidéo promo
+            </p>
+          </Link>
+
+          <Link
+            href="/characters"
+            className="block p-8 rounded-2xl bg-white/5 backdrop-blur-sm border border-rose-500/20 hover:border-rose-500/40 transition-all hover:scale-105"
+          >
+            <h2 className="text-2xl font-bold mb-2">👥 Personnages</h2>
+            <p className="text-rose-200">
+              Créez ou importez vos personnages
             </p>
           </Link>
         </div>
