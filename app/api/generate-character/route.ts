@@ -1,58 +1,75 @@
-import { fal } from '@fal-ai/client';
-import { NextRequest, NextResponse } from 'next/server';
+import { fal } from "@fal-ai/client";
+import { NextRequest, NextResponse } from "next/server";
 
-fal.config({ credentials: process.env.FAL_KEY });
+fal.config({
+  credentials: process.env.FAL_KEY,
+});
 
 export async function POST(req: NextRequest) {
   try {
     const { description, referenceImageUrl } = await req.json();
 
-    if (!description || !description.trim()) {
+    if (!description || typeof description !== "string") {
       return NextResponse.json(
-        { error: 'Description du personnage requise' },
+        { error: "Description du personnage requise" },
         { status: 400 }
       );
     }
 
-    const enhancedPrompt = `Photo de studio professionnelle sur fond GRIS UNI NEUTRE UNIQUEMENT (comme un fond de studio photo, sans aucun décor, sans architecture, sans meuble, sans bougie, sans arrière-plan narratif). Sujet : ${description}. Contraintes strictes : arrière-plan entièrement gris uni et flou, éclairage studio doux et homogène venant de face, cadrage portrait centré buste ou pied, pose neutre face caméra, aucun élément de décor visible, haute qualité photoréaliste, détails du visage nets. Rappel : le fond DOIT rester un gris uni simple, comme une fiche personnage de casting, pas une scène.`;
+    const prompt = [
+      "Portrait photo réaliste haut de gamme d'un personnage de dark romance.",
+      "Photo de studio professionnelle en qualité 2K.",
+      "Fond gris neutre uni de studio, propre et discret.",
+      "Aucun décor, aucune bibliothèque, aucune architecture, aucun meuble, aucune bougie, aucun objet en arrière-plan.",
+      "Cadrage vertical de type fiche personnage, format portrait 4:5.",
+      "Visage et épaules très nets, regard expressif, peau et textures naturelles.",
+      "Éclairage studio doux, cinématique et flatteur.",
+      "Style réaliste, élégant, sombre et sensuel, sans texte ni logo.",
+      "Description du personnage :",
+      description.trim(),
+    ].join(" ");
 
-    let result;
+    const input: Record<string, unknown> = {
+      prompt,
+      resolution: "2K",
+      aspect_ratio: "4:5",
+    };
 
     if (referenceImageUrl) {
-      result = await fal.subscribe('fal-ai/nano-banana-pro/edit', {
-        input: {
-          prompt: enhancedPrompt,
-          image_urls: [referenceImageUrl],
-          aspect_ratio: '4:5',
-          resolution: '1K',
-        },
-        logs: false,
-      });
-    } else {
-      result = await fal.subscribe('fal-ai/nano-banana-pro', {
-        input: {
-          prompt: enhancedPrompt,
-          aspect_ratio: '4:5',
-          resolution: '1K',
-        },
-        logs: false,
-      });
+      input.image_urls = [referenceImageUrl];
     }
 
-    const imageUrl = result.data.images?.[0]?.url;
+    const model = referenceImageUrl
+      ? "fal-ai/nano-banana-pro/edit"
+      : "fal-ai/nano-banana-pro";
+
+    const result = await fal.subscribe(model, {
+      input,
+      logs: false,
+    });
+
+    const imageUrl = result.data?.images?.[0]?.url;
 
     if (!imageUrl) {
       return NextResponse.json(
-        { error: "L'IA n'a pas retourné d'image" },
-        { status: 500 }
+        { error: "L'IA n'a pas retourné d'image." },
+        { status: 502 }
       );
     }
 
-    return NextResponse.json({ imageUrl });
+    return NextResponse.json({
+      imageUrl,
+    });
   } catch (error) {
-    console.error('Nano Banana Pro error:', error);
+    console.error("Nano Banana Pro error:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "La génération du personnage a échoué.";
+
     return NextResponse.json(
-      { error: 'Génération du personnage échouée' },
+      { error: message },
       { status: 500 }
     );
   }
