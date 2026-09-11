@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const enhancedPrompt = `Portrait cinématique dark romance : ${description}. Éclairage dramatique, ambiance sombre et sensuelle, haute qualité photoréaliste, détails du visage nets, arrière-plan cohérent avec l'ambiance.`;
+    const enhancedPrompt = `Fiche personnage studio : ${description}. Fond gris uni neutre, aucun décor, éclairage studio homogène et doux, cadrage portrait centré en pied ou buste, pose neutre face caméra, haute qualité photoréaliste, détails du visage nets.`;
 
     let result;
 
