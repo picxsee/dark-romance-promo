@@ -1,320 +1,234 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+
+type Project = {
+  id: string;
+  title: string;
+  summary: string;
+  genre: string;
+  vibe: string;
+  instructions: string;
+  characters: Character[];
+  posters: Poster[];
+  videos: Video[];
+  currentStep: "summary" | "characters" | "poster" | "video";
+  createdAt: number;
+  updatedAt: number;
+};
 
 type Character = {
   id: string;
   name: string;
-  imageUrl: string;
+  description?: string;
+  imageUrl?: string;
+  role?: "hero" | "heroine" | "villain" | "side";
 };
 
+type Poster = {
+  id: string;
+  characterIds: string[];
+  description: string;
+  imageUrl: string;
+  createdAt: number;
+};
+
+type Video = {
+  id: string;
+  characterId: string;
+  prompt: string;
+  videoUrl?: string;
+  createdAt: number;
+};
+
+const STORAGE_KEY = "dark_romance_projects_v1";
+
+function loadProjects(): Project[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as Project[];
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(projects: Project[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+function updateProject(projects: Project[], updated: Project): Project[] {
+  const idx = projects.findIndex((p) => p.id === updated.id);
+  if (idx === -1) return [updated, ...projects];
+  const copy = [...projects];
+  copy[idx] = { ...updated, updatedAt: Date.now() };
+  return copy;
+}
+
 export default function VideoPage() {
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sceneDescription, setSceneDescription] = useState('');
-  const [hasDialogue, setHasDialogue] = useState(false);
-  const [dialogue, setDialogue] = useState('');
-  const [quality, setQuality] = useState<'rapide' | 'finale'>('finale');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const projectId = searchParams.get("projectId");
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [characterId, setCharacterId] = useState<string>("");
+  const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem('novel_characters');
+    const list = loadProjects();
+    let p = projectId ? list.find((x) => x.id === projectId) : list[0];
 
-    if (!saved) return;
-
-    try {
-      const list: Character[] = JSON.parse(saved);
-
-      if (Array.isArray(list)) {
-        setCharacters(list);
-
-        if (list.length > 0) {
-          setSelectedId(list[0].id);
-        }
-      }
-    } catch {
-      localStorage.removeItem('novel_characters');
-    }
-  }, []);
-
-  const selectedCharacter =
-    characters.find((character) => character.id === selectedId) || null;
-
-  const buildFinalPrompt = (): string => {
-    let prompt = sceneDescription.trim();
-
-    if (hasDialogue && dialogue.trim()) {
-      prompt += `. Le personnage dit : "${dialogue.trim()}"`;
+    if (!p) {
+      router.replace("/");
+      return;
     }
 
-    prompt +=
-      '. Style cinématique sombre et sensuel, éclairage dramatique, ambiance dark romance, mouvement de caméra fluide, qualité bande-annonce de film.';
+    setProject(p);
+    if (p.characters.length > 0) {
+      setCharacterId(p.characters[0].id);
+    }
+    setLoading(false);
+  }, [projectId, router]);
 
-    return prompt;
+  const saveProject = (updated: Project) => {
+    const list = loadProjects();
+    const newList = updateProject(list, updated);
+    saveProjects(newList);
+    setProject(updated);
   };
 
-  const handleGenerate = async () => {
-    if (!selectedCharacter || !sceneDescription.trim()) return;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !characterId) return;
 
-    setLoading(true);
-    setError(null);
-    setVideoUrl(null);
+    const newVideo: Video = {
+      id: crypto.randomUUID(),
+      characterId,
+      prompt,
+      createdAt: Date.now(),
+    };
 
-    try {
-      const res = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: selectedCharacter.imageUrl,
-          scenePrompt: buildFinalPrompt(),
-          resolution: quality === 'finale' ? '720p' : '480p',
-          duration: 'auto',
-        }),
-      });
+    const updated: Project = {
+      ...project,
+      videos: [...project.videos, newVideo],
+      currentStep: "video",
+    };
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-
-        throw new Error(
-          data?.error || 'Génération vidéo échouée. Réessaie dans quelques instants.'
-        );
-      }
-
-      const data = await res.json();
-
-      if (!data.videoUrl) {
-        throw new Error("Aucune vidéo n'a été retournée.");
-      }
-
-      setVideoUrl(data.videoUrl);
-    } catch (err: any) {
-      setError(
-        err.message || 'Une erreur est survenue pendant la génération de la vidéo.'
-      );
-    } finally {
-      setLoading(false);
-    }
+    saveProject(updated);
+    setPrompt("");
   };
 
-  const canGenerate =
-    selectedCharacter !== null &&
-    sceneDescription.trim().length > 0 &&
-    !loading;
+  if (loading || !project) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white flex items-center justify-center">
+        <p>Chargement…</p>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white">
-      <div className="container mx-auto max-w-3xl px-4 py-16">
-        <nav className="flex gap-3 mb-10">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
+      <div className="max-w-4xl mx-auto px-6 py-10">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Vidéos</h1>
           <Link
-            href="/generate"
-            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
+            href="/"
+            className="text-sm text-gray-300 hover:text-white underline"
           >
-            1. Résumé
+            ← Accueil
           </Link>
+        </div>
 
-          <Link
-            href="/characters"
-            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
-          >
-            2. Personnages
-          </Link>
+        <div className="mb-6 text-xs text-gray-400">
+          Projet: {project.title || "Sans titre"} • Enregistré automatiquement
+        </div>
 
-          <span className="px-4 py-2 rounded-full bg-rose-600 text-sm font-semibold">
-            3. Vidéo
-          </span>
-        </nav>
-
-        <h1 className="text-4xl font-bold mb-2">🎥 Anime ta scène</h1>
-
-        <p className="text-purple-200 mb-10">
-          Choisis un personnage, décris son action, puis génère une séquence pour
-          promouvoir ta dark romance.
-        </p>
-
-        {characters.length === 0 ? (
-          <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-6 mb-8">
-            <p className="text-yellow-200 mb-4">
-              Aucun personnage sauvegardé pour le moment.
-            </p>
-
-            <Link
-              href="/characters"
-              className="inline-block px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 font-semibold text-sm transition-colors"
+        <form onSubmit={handleSubmit} className="space-y-4 mb-10">
+          <div>
+            <label className="block text-sm mb-1">Personnage</label>
+            <select
+              value={characterId}
+              onChange={(e) => setCharacterId(e.target.value)}
+              className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
             >
-              Créer ou sauvegarder un personnage →
-            </Link>
+              {project.characters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
-        ) : (
-          <>
-            <section className="mb-8">
-              <label className="block text-lg font-semibold mb-2">
-                1. Quel personnage apparaît dans cette scène ?
-              </label>
 
-              <p className="text-sm text-white/50 mb-4">
-                Touche une carte pour sélectionner le personnage à animer.
-              </p>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {characters.map((character) => {
-                  const isSelected = selectedId === character.id;
-
-                  return (
-                    <button
-                      key={character.id}
-                      onClick={() => {
-                        setSelectedId(character.id);
-                        setError(null);
-                      }}
-                      className={`relative rounded-xl overflow-hidden border-2 transition-all ${
-                        isSelected
-                          ? 'border-rose-500 ring-2 ring-rose-500/30'
-                          : 'border-white/10 hover:border-white/40'
-                      }`}
-                    >
-                      <img
-                        src={character.imageUrl}
-                        alt={character.name}
-                        className="w-full h-28 object-cover"
-                      />
-
-                      <p className="text-xs font-semibold truncate p-2 bg-black/50">
-                        {character.name}
-                      </p>
-
-                      {isSelected && (
-                        <span className="absolute top-2 right-2 flex w-7 h-7 items-center justify-center rounded-full bg-rose-600 font-bold shadow-lg">
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {selectedCharacter && (
-                <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                  ✓ Personnage sélectionné :{' '}
-                  <span className="font-bold">{selectedCharacter.name}</span>
-                </div>
-              )}
-            </section>
-
-            <section className="mb-6">
-              <label className="block text-lg font-semibold mb-3">
-                2. Que se passe-t-il dans la scène ?
-              </label>
-
-              <textarea
-                value={sceneDescription}
-                onChange={(e) => setSceneDescription(e.target.value)}
-                placeholder="Ex : Adrian s'approche lentement d'Elena dans une bibliothèque abandonnée. La pluie bat contre les fenêtres ; il effleure sa joue et elle retient son souffle."
-                rows={5}
-                className="w-full rounded-xl bg-white/5 border border-rose-500/20 focus:border-rose-500/60 outline-none p-4 text-white placeholder-white/40 resize-none transition-colors"
-              />
-            </section>
-
-            <section className="mb-8">
-              <label className="flex items-center gap-3 mb-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasDialogue}
-                  onChange={(e) => setHasDialogue(e.target.checked)}
-                  className="w-5 h-5 accent-rose-600"
-                />
-
-                <span className="text-lg font-semibold">
-                  3. Le personnage parle-t-il ?
-                </span>
-              </label>
-
-              {hasDialogue && (
-                <input
-                  type="text"
-                  value={dialogue}
-                  onChange={(e) => setDialogue(e.target.value)}
-                  placeholder="Ex : Tu ne pourras jamais m'échapper."
-                  className="w-full rounded-xl bg-white/5 border border-rose-500/20 focus:border-rose-500/60 outline-none p-4 text-white placeholder-white/40 transition-colors"
-                />
-              )}
-            </section>
-
-            <section className="mb-8">
-              <label className="block text-lg font-semibold mb-3">Qualité</label>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setQuality('rapide')}
-                  className={`px-5 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                    quality === 'rapide'
-                      ? 'bg-rose-600'
-                      : 'bg-white/10 hover:bg-white/20 text-white/70'
-                  }`}
-                >
-                  Aperçu rapide
-                </button>
-
-                <button
-                  onClick={() => setQuality('finale')}
-                  className={`px-5 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                    quality === 'finale'
-                      ? 'bg-rose-600'
-                      : 'bg-white/10 hover:bg-white/20 text-white/70'
-                  }`}
-                >
-                  Qualité promo
-                </button>
-              </div>
-            </section>
-
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className={`w-full py-4 rounded-xl font-bold text-lg transition-all mb-8 ${
-                canGenerate
-                  ? 'bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 cursor-pointer'
-                  : 'bg-white/10 text-white/30 cursor-not-allowed'
-              }`}
-            >
-              {loading
-                ? '🎬 Génération en cours, attends la vidéo...'
-                : '🎬 Générer la vidéo'}
-            </button>
-          </>
-        )}
-
-        {error && (
-          <div className="mb-8 rounded-xl border border-red-500/40 bg-red-500/5 p-4">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-
-        {videoUrl && (
-          <div className="mb-8 rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/5 p-6">
-            <h3 className="font-bold text-lg mb-4">✨ Ta vidéo est prête</h3>
-
-            <video
-              src={videoUrl}
-              controls
-              playsInline
-              className="w-full rounded-lg"
+          <div>
+            <label className="block text-sm mb-1">Scène / prompt</label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={4}
+              className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
+              placeholder="Décris la scène à générer en vidéo…"
             />
-
-            <a
-              href={videoUrl}
-              download
-              className="inline-block mt-4 px-5 py-2 rounded-lg bg-green-600 hover:bg-green-500 font-semibold text-sm transition-colors"
-            >
-              ⬇️ Télécharger la vidéo
-            </a>
           </div>
+
+          <button
+            type="submit"
+            className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600"
+          >
+            Créer la vidéo
+          </button>
+        </form>
+
+        {project.videos.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Tes vidéos</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              {project.videos.map((v) => {
+                const character = project.characters.find(
+                  (c) => c.id === v.characterId
+                );
+                return (
+                  <div
+                    key={v.id}
+                    className="p-4 rounded-lg border border-gray-700 bg-gray-800/40"
+                  >
+                    <div className="text-sm text-gray-400 mb-1">
+                      {character?.name}
+                    </div>
+                    <p className="text-sm text-gray-300 mb-2">{v.prompt}</p>
+                    {v.videoUrl ? (
+                      <video
+                        src={v.videoUrl}
+                        controls
+                        className="w-full rounded border border-gray-700"
+                      />
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        Vidéo à générer…
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
+
+        <div className="mt-8 flex gap-3">
+          <Link
+            href={`/characters?projectId=${project.id}`}
+            className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600"
+          >
+            ← Personnages
+          </Link>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
