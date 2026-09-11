@@ -7,7 +7,10 @@ fal.config({
 
 export async function POST(req: NextRequest) {
   try {
-    const { description, referenceImageUrl } = await req.json();
+    const body = await req.json();
+
+    const description = body.description;
+    const referenceImageUrl = body.referenceImageUrl;
 
     if (!description || typeof description !== "string") {
       return NextResponse.json(
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest) {
       "Portrait photo réaliste haut de gamme d'un personnage de dark romance.",
       "Photo de studio professionnelle en qualité 2K.",
       "Fond gris neutre uni de studio, propre et discret.",
-      "Aucun décor, aucune bibliothèque, aucune architecture, aucun meuble, aucune bougie, aucun objet en arrière-plan.",
+      "Aucun décor, aucune architecture, aucun meuble, aucune bougie, aucun objet en arrière-plan.",
       "Cadrage vertical de type fiche personnage, format portrait 4:5.",
       "Visage et épaules très nets, regard expressif, peau et textures naturelles.",
       "Éclairage studio doux, cinématique et flatteur.",
@@ -29,24 +32,28 @@ export async function POST(req: NextRequest) {
       description.trim(),
     ].join(" ");
 
-    const input: Record<string, unknown> = {
-      prompt,
-      resolution: "2K",
-      aspect_ratio: "4:5",
-    };
-
-    if (referenceImageUrl) {
-      input.image_urls = [referenceImageUrl];
-    }
-
     const model = referenceImageUrl
       ? "fal-ai/nano-banana-pro/edit"
       : "fal-ai/nano-banana-pro";
 
-    const result = await fal.subscribe(model, {
-      input,
-      logs: false,
-    });
+    const result = referenceImageUrl
+      ? await fal.subscribe(model, {
+          input: {
+            prompt,
+            image_urls: [referenceImageUrl],
+            resolution: "2K",
+            aspect_ratio: "4:5",
+          },
+          logs: false,
+        })
+      : await fal.subscribe(model, {
+          input: {
+            prompt,
+            resolution: "2K",
+            aspect_ratio: "4:5",
+          },
+          logs: false,
+        });
 
     const imageUrl = result.data?.images?.[0]?.url;
 
@@ -63,13 +70,8 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Nano Banana Pro error:", error);
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "La génération du personnage a échoué.";
-
     return NextResponse.json(
-      { error: message },
+      { error: "La génération du personnage a échoué." },
       { status: 500 }
     );
   }
