@@ -1,17 +1,21 @@
 import { fal } from "@fal-ai/client";
 import { NextRequest, NextResponse } from "next/server";
 
-// Autorise la fonction Vercel à attendre jusqu'à 60 secondes.
-// Sans cette ligne, elle est arrêtée après environ 5 secondes
-// alors que Seedance est encore en train de générer la vidéo.
 export const maxDuration = 60;
 
-fal.config({ credentials: process.env.FAL_KEY });
+fal.config({
+  credentials: process.env.FAL_KEY,
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageUrl, scenePrompt, endImageUrl, resolution, duration } =
-      await req.json();
+    const body = await req.json();
+
+    const imageUrl = body.imageUrl;
+    const scenePrompt = body.scenePrompt;
+    const endImageUrl = body.endImageUrl;
+    const resolution = body.resolution || "720p";
+    const duration = body.duration || "auto";
 
     if (!imageUrl || !scenePrompt) {
       return NextResponse.json(
@@ -27,8 +31,8 @@ export async function POST(req: NextRequest) {
           image_url: imageUrl,
           prompt: scenePrompt,
           end_image_url: endImageUrl || undefined,
-          resolution: resolution || "720p",
-          duration: duration || "auto",
+          resolution,
+          duration,
           generate_audio: true,
         },
         logs: false,
@@ -39,46 +43,21 @@ export async function POST(req: NextRequest) {
 
     if (!videoUrl) {
       return NextResponse.json(
-        { error: "Seedance n'a pas retourné de vidéo." },
+        { error: "Aucune vidéo retournée par Seedance" },
         { status: 502 }
       );
     }
 
     return NextResponse.json({
       videoUrl,
-      seed: result.data?.seed,
+      seed: result.data?.seed ?? null,
     });
   } catch (error) {
     console.error("fal.ai Seedance 2.5 error:", error);
-
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Génération vidéo échouée";
 
     return NextResponse.json(
-      { error: message },
+      { error: "Génération vidéo échouée" },
       { status: 500 }
     );
-  }
-}-2.5/image-to-video", {
-      input: {
-        image_url: imageUrl,
-        prompt: scenePrompt,
-        end_image_url: endImageUrl || undefined,
-        resolution: resolution || "720p",
-        duration: duration || "auto",
-        generate_audio: true,
-      },
-      logs: false,
-    });
-
-    return NextResponse.json({
-      videoUrl: result.data.video.url,
-      seed: result.data.seed,
-    });
-  } catch (error) {
-    console.error("fal.ai Seedance 2.5 error:", error);
-    return NextResponse.json({ error: "Génération vidéo échouée" }, { status: 500 });
   }
 }
