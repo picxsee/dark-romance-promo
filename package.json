@@ -12,7 +12,8 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "@fal-ai/client": "^1.7.0",
-    "@supabase/supabase-js": "^2.45.4"
+    "@supabase/supabase-js": "^2.45.4",
+    "@anthropic-ai/sdk": "^0.32.1"
   },
   "devDependencies": {
     "@types/node": "22.13.10",
