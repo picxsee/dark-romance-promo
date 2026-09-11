@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const enhancedPrompt = `Fiche personnage studio : ${description}. Fond gris uni neutre, aucun décor, éclairage studio homogène et doux, cadrage portrait centré en pied ou buste, pose neutre face caméra, haute qualité photoréaliste, détails du visage nets.`;
+    const enhancedPrompt = `Photo de studio professionnelle sur fond GRIS UNI NEUTRE UNIQUEMENT (comme un fond de studio photo, sans aucun décor, sans architecture, sans meuble, sans bougie, sans arrière-plan narratif). Sujet : ${description}. Contraintes strictes : arrière-plan entièrement gris uni et flou, éclairage studio doux et homogène venant de face, cadrage portrait centré buste ou pied, pose neutre face caméra, aucun élément de décor visible, haute qualité photoréaliste, détails du visage nets. Rappel : le fond DOIT rester un gris uni simple, comme une fiche personnage de casting, pas une scène.`;
 
     let result;
 
