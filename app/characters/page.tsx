@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -47,11 +47,8 @@ const STORAGE_KEY = "dark_romance_projects_v1";
 
 function loadProjects(): Project[] {
   if (typeof window === "undefined") return [];
-
   const raw = localStorage.getItem(STORAGE_KEY);
-
   if (!raw) return [];
-
   try {
     return JSON.parse(raw) as Project[];
   } catch {
@@ -61,33 +58,18 @@ function loadProjects(): Project[] {
 
 function saveProjects(projects: Project[]) {
   if (typeof window === "undefined") return;
-
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
 function updateProject(projects: Project[], updated: Project): Project[] {
-  const index = projects.findIndex((project) => project.id === updated.id);
-
-  if (index === -1) {
-    return [updated, ...projects];
-  }
-
+  const idx = projects.findIndex((p) => p.id === updated.id);
+  if (idx === -1) return [updated, ...projects];
   const copy = [...projects];
-
-  copy[index] = {
-    ...updated,
-    updatedAt: Date.now(),
-  };
-
+  copy[idx] = { ...updated, updatedAt: Date.now() };
   return copy;
 }
 
-/*
-  useSearchParams() est isolé dans ce composant.
-  Le composant exporté tout en bas l'entoure avec Suspense,
-  ce qui corrige l'erreur de build Vercel.
-*/
-function CharactersPageContent() {
+export default function CharactersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -96,34 +78,33 @@ function CharactersPageContent() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Formulaire personnage
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [role, setRole] = useState<Character["role"]>("heroine");
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
 
+  // Édition
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     const list = loadProjects();
-    const currentProject = projectId
-      ? list.find((item) => item.id === projectId)
-      : list[0];
+    let p = projectId ? list.find((x) => x.id === projectId) : list[0];
 
-    if (!currentProject) {
+    if (!p) {
       router.replace("/");
       return;
     }
 
-    setProject(currentProject);
+    setProject(p);
     setLoading(false);
   }, [projectId, router]);
 
-  const saveProject = (updatedProject: Project) => {
-    const projects = loadProjects();
-    const updatedProjects = updateProject(projects, updatedProject);
-
-    saveProjects(updatedProjects);
-    setProject(updatedProject);
+  const saveProject = (updated: Project) => {
+    const list = loadProjects();
+    const newList = updateProject(list, updated);
+    saveProjects(newList);
+    setProject(updated);
   };
 
   const resetForm = () => {
@@ -134,12 +115,11 @@ function CharactersPageContent() {
     setEditingId(null);
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!project) return;
 
-    const character: Character = {
+    const newChar: Character = {
       id: editingId || crypto.randomUUID(),
       name,
       description,
@@ -147,50 +127,47 @@ function CharactersPageContent() {
       imageUrl,
     };
 
-    const updatedProject: Project = editingId
-      ? {
-          ...project,
-          characters: project.characters.map((item) =>
-            item.id === editingId ? character : item
-          ),
-          currentStep: "characters",
-        }
-      : {
-          ...project,
-          characters: [...project.characters, character],
-          currentStep: "characters",
-        };
+    let updated: Project;
+    if (editingId) {
+      updated = {
+        ...project,
+        characters: project.characters.map((c) =>
+          c.id === editingId ? newChar : c
+        ),
+        currentStep: "characters",
+      };
+    } else {
+      updated = {
+        ...project,
+        characters: [...project.characters, newChar],
+        currentStep: "characters",
+      };
+    }
 
-    saveProject(updatedProject);
+    saveProject(updated);
     resetForm();
   };
 
-  const handleEdit = (character: Character) => {
-    setName(character.name);
-    setDescription(character.description || "");
-    setRole(character.role || "heroine");
-    setImageUrl(character.imageUrl);
-    setEditingId(character.id);
+  const handleEdit = (c: Character) => {
+    setName(c.name);
+    setDescription(c.description || "");
+    setRole(c.role || "heroine");
+    setImageUrl(c.imageUrl);
+    setEditingId(c.id);
   };
 
   const handleDelete = (id: string) => {
     if (!project) return;
-
-    const updatedProject: Project = {
+    const updated = {
       ...project,
-      characters: project.characters.filter((character) => character.id !== id),
+      characters: project.characters.filter((c) => c.id !== id),
     };
-
-    saveProject(updatedProject);
-
-    if (editingId === id) {
-      resetForm();
-    }
+    saveProject(updated);
+    if (editingId === id) resetForm();
   };
 
   const goToVideo = () => {
     if (!project) return;
-
     router.push(`/video?projectId=${project.id}`);
   };
 
@@ -207,7 +184,6 @@ function CharactersPageContent() {
       <div className="max-w-5xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Personnages</h1>
-
           <Link
             href="/"
             className="text-sm text-gray-300 hover:text-white underline"
@@ -217,34 +193,27 @@ function CharactersPageContent() {
         </div>
 
         <div className="mb-6 text-xs text-gray-400">
-          Projet : {project.title || "Sans titre"} • Enregistré automatiquement
+          Projet: {project.title || "Sans titre"} • Enregistré automatiquement
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid md:grid-cols-2 gap-6 mb-10"
-        >
+        {/* Formulaire */}
+        <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-6 mb-10">
           <div className="space-y-4">
             <div>
               <label className="block text-sm mb-1">Nom</label>
-
               <input
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(e) => setName(e.target.value)}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
-                placeholder="Ex : Elena"
+                placeholder="Ex: Elena"
                 required
               />
             </div>
-
             <div>
               <label className="block text-sm mb-1">Rôle</label>
-
               <select
                 value={role}
-                onChange={(event) =>
-                  setRole(event.target.value as Character["role"])
-                }
+                onChange={(e) => setRole(e.target.value as Character["role"])}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
               >
                 <option value="heroine">Héroïne</option>
@@ -253,15 +222,13 @@ function CharactersPageContent() {
                 <option value="side">Secondaire</option>
               </select>
             </div>
-
             <div>
               <label className="block text-sm mb-1">
-                Description ou prompt
+                Description (ou prompt)
               </label>
-
               <textarea
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                onChange={(e) => setDescription(e.target.value)}
                 rows={4}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
                 placeholder="Décris son apparence, son style, son aura…"
@@ -272,40 +239,34 @@ function CharactersPageContent() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm mb-1">
-                URL image — optionnel
+                URL image (optionnel)
               </label>
-
               <input
                 value={imageUrl || ""}
-                onChange={(event) =>
-                  setImageUrl(event.target.value || undefined)
-                }
+                onChange={(e) => setImageUrl(e.target.value || undefined)}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
                 placeholder="https://…"
               />
             </div>
-
             {imageUrl && (
               <img
                 src={imageUrl}
-                alt="Aperçu du personnage"
+                alt="Aperçu"
                 className="w-full rounded border border-gray-700"
               />
             )}
-
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 transition"
+                className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600"
               >
                 {editingId ? "Mettre à jour" : "Ajouter le personnage"}
               </button>
-
               {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 transition"
+                  className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600"
                 >
                   Annuler
                 </button>
@@ -314,52 +275,45 @@ function CharactersPageContent() {
           </div>
         </form>
 
+        {/* Liste */}
         {project.characters.length > 0 && (
           <section className="mb-10">
             <h2 className="text-2xl font-semibold mb-4">Tes personnages</h2>
-
             <div className="grid gap-4 md:grid-cols-3">
-              {project.characters.map((character) => (
+              {project.characters.map((c) => (
                 <div
-                  key={character.id}
-                  onClick={() => handleEdit(character)}
+                  key={c.id}
+                  onClick={() => handleEdit(c)}
                   className="p-4 rounded-lg border border-gray-700 bg-gray-800/40 cursor-pointer hover:border-purple-500 transition"
                 >
-                  {character.imageUrl && (
+                  {c.imageUrl && (
                     <img
-                      src={character.imageUrl}
-                      alt={character.name}
+                      src={c.imageUrl}
+                      alt={c.name}
                       className="w-full rounded mb-3 border border-gray-700"
                     />
                   )}
-
-                  <h3 className="font-semibold">{character.name}</h3>
-
+                  <h3 className="font-semibold">{c.name}</h3>
                   <p className="text-xs text-gray-400 mb-2 capitalize">
-                    {character.role}
+                    {c.role}
                   </p>
-
                   <p className="text-sm text-gray-300 line-clamp-3">
-                    {character.description}
+                    {c.description}
                   </p>
-
                   <div className="mt-3 flex gap-2">
                     <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleEdit(character);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(c);
                       }}
                       className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600"
                     >
                       Modifier
                     </button>
-
                     <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDelete(character.id);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(c.id);
                       }}
                       className="text-xs px-2 py-1 rounded bg-red-900/40 hover:bg-red-900/60"
                     >
@@ -375,34 +329,18 @@ function CharactersPageContent() {
         <div className="flex gap-3">
           <Link
             href={`/generate?projectId=${project.id}`}
-            className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 transition"
+            className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600"
           >
             ← Histoire
           </Link>
-
           <button
-            type="button"
             onClick={goToVideo}
-            className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 transition"
+            className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600"
           >
             Continuer → Vidéos
           </button>
         </div>
       </div>
     </div>
-  );
-}
-
-export default function CharactersPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white flex items-center justify-center">
-          <p>Chargement…</p>
-        </div>
-      }
-    >
-      <CharactersPageContent />
-    </Suspense>
   );
 }
