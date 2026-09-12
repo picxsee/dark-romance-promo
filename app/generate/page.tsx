@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -47,8 +47,11 @@ const STORAGE_KEY = "dark_romance_projects_v1";
 
 function loadProjects(): Project[] {
   if (typeof window === "undefined") return [];
+
   const raw = localStorage.getItem(STORAGE_KEY);
+
   if (!raw) return [];
+
   try {
     return JSON.parse(raw) as Project[];
   } catch {
@@ -58,18 +61,34 @@ function loadProjects(): Project[] {
 
 function saveProjects(projects: Project[]) {
   if (typeof window === "undefined") return;
+
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
 function updateProject(projects: Project[], updated: Project): Project[] {
-  const idx = projects.findIndex((p) => p.id === updated.id);
-  if (idx === -1) return [updated, ...projects];
+  const index = projects.findIndex((project) => project.id === updated.id);
+
+  if (index === -1) {
+    return [updated, ...projects];
+  }
+
   const copy = [...projects];
-  copy[idx] = { ...updated, updatedAt: Date.now() };
+
+  copy[index] = {
+    ...updated,
+    updatedAt: Date.now(),
+  };
+
   return copy;
 }
 
-export default function GeneratePage() {
+/*
+  IMPORTANT :
+  useSearchParams() est utilisé dans ce composant intérieur.
+  Il est ensuite enveloppé par Suspense dans le composant exporté,
+  ce qui empêche l'erreur Vercel pendant le build.
+*/
+function GeneratePageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -86,17 +105,19 @@ export default function GeneratePage() {
 
   useEffect(() => {
     const list = loadProjects();
-    let p: Project | undefined;
+
+    let currentProject: Project | undefined;
+
     if (projectId) {
-      p = list.find((x) => x.id === projectId);
+      currentProject = list.find((item) => item.id === projectId);
     } else {
-      // s’il n’y a pas de projectId, on prend le dernier projet
-      p = list[0];
+      currentProject = list[0];
     }
 
-    if (!p) {
-      // aucun projet : on crée un projet vide et on redirige
-      const newP: Project = {
+    if (!currentProject) {
+      const now = Date.now();
+
+      const newProject: Project = {
         id: crypto.randomUUID(),
         title: "",
         summary: "",
@@ -107,27 +128,32 @@ export default function GeneratePage() {
         posters: [],
         videos: [],
         currentStep: "summary",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: now,
+        updatedAt: now,
       };
-      const updated = updateProject(list, newP);
-      saveProjects(updated);
-      router.replace(`/generate?projectId=${newP.id}`);
+
+      const updatedProjects = updateProject(list, newProject);
+
+      saveProjects(updatedProjects);
+
+      router.replace(`/generate?projectId=${newProject.id}`);
+
       return;
     }
 
-    setProject(p);
-    setTitle(p.title);
-    setSummary(p.summary);
-    setGenre(p.genre);
-    setVibe(p.vibe);
-    setInstructions(p.instructions);
+    setProject(currentProject);
+    setTitle(currentProject.title);
+    setSummary(currentProject.summary);
+    setGenre(currentProject.genre);
+    setVibe(currentProject.vibe);
+    setInstructions(currentProject.instructions);
     setLoading(false);
   }, [projectId, router]);
 
   const saveHistory = () => {
     if (!project) return;
-    const updated: Project = {
+
+    const updatedProject: Project = {
       ...project,
       title,
       summary,
@@ -136,23 +162,30 @@ export default function GeneratePage() {
       instructions,
       currentStep: "summary",
     };
-    const list = loadProjects();
-    const newList = updateProject(list, updated);
-    saveProjects(newList);
-    setProject(updated);
+
+    const projects = loadProjects();
+    const updatedProjects = updateProject(projects, updatedProject);
+
+    saveProjects(updatedProjects);
+    setProject(updatedProject);
   };
 
   useEffect(() => {
     if (!project) return;
-    const timeout = setTimeout(() => {
+
+    const timeout = window.setTimeout(() => {
       saveHistory();
     }, 800);
-    return () => clearTimeout(timeout);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, summary, genre, vibe, instructions]);
 
   const goToCharacters = () => {
     if (!project) return;
+
     router.push(`/characters?projectId=${project.id}`);
   };
 
@@ -169,6 +202,7 @@ export default function GeneratePage() {
       <div className="max-w-3xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Histoire</h1>
+
           <Link
             href="/"
             className="text-sm text-gray-300 hover:text-white underline"
@@ -178,48 +212,53 @@ export default function GeneratePage() {
         </div>
 
         <div className="mb-6 text-xs text-gray-400">
-          Projet: {project.title || "Sans titre"} • Enregistré automatiquement
+          Projet : {project.title || "Sans titre"} • Enregistré automatiquement
         </div>
 
         <div className="space-y-4">
           <div>
             <label className="block text-sm mb-1">Titre du livre</label>
+
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
               className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
-              placeholder="Ex: Les Ombres du Désir"
+              placeholder="Ex : Les Ombres du Désir"
             />
           </div>
 
           <div>
             <label className="block text-sm mb-1">Résumé</label>
+
             <textarea
               value={summary}
-              onChange={(e) => setSummary(e.target.value)}
+              onChange={(event) => setSummary(event.target.value)}
               rows={5}
               className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
               placeholder="Décris ton histoire en quelques phrases…"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1">Genre</label>
+
               <input
                 value={genre}
-                onChange={(e) => setGenre(e.target.value)}
+                onChange={(event) => setGenre(event.target.value)}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
-                placeholder="Ex: Dark Romance, Mafia, Paranormal…"
+                placeholder="Ex : Dark Romance, Mafia, Paranormal…"
               />
             </div>
+
             <div>
               <label className="block text-sm mb-1">Ambiance</label>
+
               <input
                 value={vibe}
-                onChange={(e) => setVibe(e.target.value)}
+                onChange={(event) => setVibe(event.target.value)}
                 className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
-                placeholder="Ex: Sombre, sensuel, toxique…"
+                placeholder="Ex : Sombre, sensuel, toxique…"
               />
             </div>
           </div>
@@ -228,25 +267,41 @@ export default function GeneratePage() {
             <label className="block text-sm mb-1">
               Consignes pour les visuels
             </label>
+
             <textarea
               value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
+              onChange={(event) => setInstructions(event.target.value)}
               rows={3}
               className="w-full rounded bg-gray-800 border border-gray-700 px-3 py-2 text-white"
-              placeholder="Ex: style cinématique, couleurs froides, plans serrés…"
+              placeholder="Ex : style cinématique, couleurs froides, plans serrés…"
             />
           </div>
         </div>
 
         <div className="mt-8 flex gap-3">
           <button
+            type="button"
             onClick={goToCharacters}
-            className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600"
+            className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 transition"
           >
             Continuer → Personnages
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function GeneratePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white flex items-center justify-center">
+          <p>Chargement…</p>
+        </div>
+      }
+    >
+      <GeneratePageContent />
+    </Suspense>
   );
 }
