@@ -26,7 +26,6 @@ type Video = {
   id: string;
   characterIds: string[];
   prompt: string;
-  dialogue?: string;
   videoUrl?: string;
   createdAt: number;
 };
@@ -101,7 +100,6 @@ function VideoContent() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sceneDescription, setSceneDescription] = useState("");
-  const [dialogue, setDialogue] = useState("");
 
   const [composedImage, setComposedImage] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
@@ -143,16 +141,6 @@ function VideoContent() {
     );
     setComposedImage(null);
     setComposeError(null);
-  };
-
-  const buildFinalPrompt = () => {
-    const parts = [sceneDescription.trim()];
-
-    if (dialogue.trim()) {
-      parts.push(`Dialogue prononcé par le(s) personnage(s) : "${dialogue.trim()}"`);
-    }
-
-    return parts.filter(Boolean).join(". ");
   };
 
   const handleComposeScene = async () => {
@@ -236,7 +224,7 @@ function VideoContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageUrl: composedImage,
-          scenePrompt: buildFinalPrompt(),
+          scenePrompt: sceneDescription,
         }),
       });
 
@@ -251,7 +239,6 @@ function VideoContent() {
         id: crypto.randomUUID(),
         characterIds: [...selectedIds],
         prompt: sceneDescription,
-        dialogue: dialogue.trim() || undefined,
         videoUrl: data.videoUrl,
         createdAt: Date.now(),
       };
@@ -263,7 +250,6 @@ function VideoContent() {
       });
 
       setSceneDescription("");
-      setDialogue("");
       setComposedImage(null);
       setSelectedIds([]);
     } catch (err: any) {
@@ -363,7 +349,9 @@ function VideoContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm">Description de la scène</label>
+              <label className="mb-1 block text-sm">
+                Description de la scène (inclus le dialogue directement dans le texte)
+              </label>
 
               <textarea
                 value={sceneDescription}
@@ -371,28 +359,10 @@ function VideoContent() {
                   setSceneDescription(event.target.value);
                   setComposedImage(null);
                 }}
-                rows={4}
+                rows={8}
                 className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white"
-                placeholder="Décris la scène : lieu, ambiance, action des personnages…"
+                placeholder={'Décris la scène, l\'action, l\'ambiance… et écris le dialogue directement dedans, par ex. :\n— Tu te trompes de bourreau, répond-il d\'une voix basse.'}
               />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm">Dialogue (optionnel)</label>
-
-              <textarea
-                value={dialogue}
-                onChange={(event) => setDialogue(event.target.value)}
-                rows={2}
-                className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white"
-                placeholder='Ex : "Je ne te laisserai jamais partir."'
-              />
-
-              {(sceneDescription.trim() || dialogue.trim()) && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Prompt final envoyé à l'IA : « {buildFinalPrompt()} »
-                </p>
-              )}
             </div>
 
             <button
@@ -456,13 +426,9 @@ function VideoContent() {
                       {names || "Personnage(s) inconnu(s)"}
                     </div>
 
-                    <p className="mb-1 text-sm text-gray-300">{video.prompt}</p>
-
-                    {video.dialogue && (
-                      <p className="mb-2 text-sm italic text-purple-300">
-                        « {video.dialogue} »
-                      </p>
-                    )}
+                    <p className="mb-2 text-sm text-gray-300 whitespace-pre-wrap">
+                      {video.prompt}
+                    </p>
 
                     {video.videoUrl ? (
                       <video
