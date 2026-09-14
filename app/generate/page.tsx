@@ -1,12 +1,121 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-export default function GeneratePage() {
+type CharacterRole = "hero" | "heroine" | "villain" | "side";
+
+type Character = {
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  role?: CharacterRole;
+};
+
+type Poster = {
+  id: string;
+  characterIds: string[];
+  description: string;
+  imageUrl: string;
+  createdAt: number;
+};
+
+type Video = {
+  id: string;
+  characterIds: string[];
+  prompt: string;
+  videoUrl?: string;
+  createdAt: number;
+};
+
+type Project = {
+  id: string;
+  title: string;
+  summary: string;
+  genre: string;
+  vibe: string;
+  instructions: string;
+  characters: Character[];
+  posters: Poster[];
+  videos: Video[];
+  currentStep: "summary" | "characters" | "poster" | "video";
+  createdAt: number;
+  updatedAt: number;
+};
+
+const STORAGE_KEY = "dark_romance_projects_v1";
+
+function loadProjects(): Project[] {
+  if (typeof window === "undefined") return [];
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+
+  if (!raw) return [];
+
+  try {
+    return JSON.parse(raw) as Project[];
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(projects: Project[]) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+function updateProject(projects: Project[], updated: Project): Project[] {
+  const index = projects.findIndex((project) => project.id === updated.id);
+
+  if (index === -1) {
+    return [updated, ...projects];
+  }
+
+  const copy = [...projects];
+
+  copy[index] = {
+    ...updated,
+    updatedAt: Date.now(),
+  };
+
+  return copy;
+}
+
+function createEmptyProject(): Project {
+  const now = Date.now();
+  return {
+    id: crypto.randomUUID(),
+    title: "",
+    summary: "",
+    genre: "",
+    vibe: "",
+    instructions: "",
+    characters: [],
+    posters: [],
+    videos: [],
+    currentStep: "summary",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/*
+  useSearchParams() doit être dans ce composant interne.
+  Le composant GeneratePage, exporté par défaut plus bas,
+  l'entoure avec Suspense pour que Vercel puisse construire /generate.
+*/
+function GenerateContent() {
   const router = useRouter();
-  const [summary, setSummary] = useState('');
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+
+  const [summary, setSummary] = useState("");
   const [improvedSummary, setImprovedSummary] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -15,13 +124,35 @@ export default function GeneratePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('novel_summary');
-    if (saved) setSummary(saved);
-  }, []);
+    const projects = loadProjects();
+
+    let selectedProject = projectId
+      ? projects.find((item) => item.id === projectId)
+      : projects[0];
+
+    if (!selectedProject) {
+      selectedProject = createEmptyProject();
+      saveProjects([selectedProject, ...projects]);
+      router.replace(`/generate?projectId=${selectedProject.id}`);
+    }
+
+    setProject(selectedProject);
+    setSummary(selectedProject.summary || "");
+    setPageLoading(false);
+  }, [projectId, router]);
+
+  function persistProject(updatedProject: Project) {
+    const projects = loadProjects();
+    const updatedProjects = updateProject(projects, updatedProject);
+
+    saveProjects(updatedProjects);
+    setProject(updatedProject);
+  }
 
   const handleFile = async (file: File) => {
     setFileName(file.name);
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+
+    if (file.type === "text/plain" || file.name.endsWith(".txt")) {
       const text = await file.text();
       setSummary(text.slice(0, 4000));
     }
@@ -30,6 +161,7 @@ export default function GeneratePage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
+
     const file = e.dataTransfer.files?.[0];
     if (file) handleFile(file);
   };
@@ -41,16 +173,20 @@ export default function GeneratePage() {
 
   const handleImproveWithAI = async () => {
     if (!summary.trim()) return;
+
     setLoadingIA(true);
     setErrorIA(null);
     setImprovedSummary(null);
+
     try {
-      const res = await fetch('/api/improve-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/improve-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: summary }),
       });
-      if (!res.ok) throw new Error('Erreur API');
+
+      if (!res.ok) throw new Error("Erreur API");
+
       const data = await res.json();
       setImprovedSummary(data.improved);
     } catch (err) {
@@ -61,39 +197,52 @@ export default function GeneratePage() {
   };
 
   const acceptImproved = () => {
-    if (improvedSummary) {
+    if (improvedSummary && project) {
       setSummary(improvedSummary);
+      persistProject({ ...project, summary: improvedSummary });
       setImprovedSummary(null);
-      sessionStorage.setItem('novel_summary', improvedSummary);
     }
   };
 
   const rejectImproved = () => setImprovedSummary(null);
 
   const saveAndGoTo = (path: string) => {
-    sessionStorage.setItem('novel_summary', summary);
-    if (fileName) sessionStorage.setItem('novel_file_name', fileName);
-    router.push(path);
+    if (!project) return;
+
+    persistProject({
+      ...project,
+      summary,
+      currentStep: "characters",
+    });
+
+    router.push(`${path}?projectId=${project.id}`);
   };
 
   const canContinue = summary.trim().length > 0 || fileName !== null;
 
+  if (pageLoading || !project) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
+        <p>Chargement…</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white">
       <div className="container mx-auto px-4 py-16 max-w-3xl">
-        {/* Navigation libre entre étapes */}
         <nav className="flex gap-3 mb-10">
           <span className="px-4 py-2 rounded-full bg-rose-600 text-sm font-semibold">
             1. Résumé
           </span>
           <Link
-            href="/characters"
+            href={`/characters?projectId=${project.id}`}
             className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
           >
             2. Personnages
           </Link>
           <Link
-            href="/video"
+            href={`/video?projectId=${project.id}`}
             className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
           >
             3. Vidéo
@@ -101,18 +250,24 @@ export default function GeneratePage() {
         </nav>
 
         <h1 className="text-4xl font-bold mb-2">🎬 L'histoire de ton roman</h1>
-        <p className="text-purple-200 mb-10">
+        <p className="text-purple-200 mb-2">
           Écris ton résumé, importe un fichier, ou laisse l'IA t'aider — tu peux naviguer librement entre les étapes.
         </p>
 
-        {/* Zone de texte */}
+        <p className="text-xs text-white/40 mb-10">
+          Projet : {project.title || "Sans titre"} • Enregistré automatiquement
+        </p>
+
         <div className="mb-4">
           <label className="block text-lg font-semibold mb-3">
             ✍️ Écris ou colle ton résumé / synopsis
           </label>
           <textarea
             value={summary}
-            onChange={(e) => setSummary(e.target.value)}
+            onChange={(e) => {
+              setSummary(e.target.value);
+              persistProject({ ...project, summary: e.target.value });
+            }}
             placeholder="Ex : Elena n'aurait jamais dû franchir la porte de ce manoir. Mais quand Damian, l'héritier maudit des Volkov, pose les yeux sur elle, il est déjà trop tard pour fuir..."
             rows={8}
             className="w-full rounded-xl bg-white/5 backdrop-blur-sm border border-rose-500/20 focus:border-rose-500/60 outline-none p-4 text-white placeholder-white/40 resize-none transition-colors"
@@ -120,23 +275,21 @@ export default function GeneratePage() {
           <p className="text-sm text-white/40 mt-2">{summary.length} caractères</p>
         </div>
 
-        {/* Bouton IA */}
         <div className="mb-8">
           <button
             onClick={handleImproveWithAI}
             disabled={!summary.trim() || loadingIA}
             className={`px-5 py-3 rounded-xl font-semibold text-sm transition-colors ${
               !summary.trim() || loadingIA
-                ? 'bg-white/10 text-white/30 cursor-not-allowed'
-                : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500'
+                ? "bg-white/10 text-white/30 cursor-not-allowed"
+                : "bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
             }`}
           >
-            {loadingIA ? '✨ Réécriture en cours...' : '✨ Améliorer avec l\'IA (Claude)'}
+            {loadingIA ? "✨ Réécriture en cours..." : "✨ Améliorer avec l'IA (Claude)"}
           </button>
           {errorIA && <p className="text-red-400 text-sm mt-2">{errorIA}</p>}
         </div>
 
-        {/* Validation de la version IA */}
         {improvedSummary && (
           <div className="mb-8 rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/5 p-6">
             <h3 className="font-bold text-lg mb-3">✨ Version réécrite par l'IA</h3>
@@ -164,21 +317,31 @@ export default function GeneratePage() {
           <div className="h-px flex-1 bg-white/10" />
         </div>
 
-        {/* Zone d'upload */}
         <div className="mb-10">
           <label className="block text-lg font-semibold mb-3">
             📄 Importe ton manuscrit ou synopsis
           </label>
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
             className={`rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
-              dragActive ? 'border-rose-500 bg-rose-500/10' : 'border-white/20 hover:border-purple-500/50 bg-white/5'
+              dragActive
+                ? "border-rose-500 bg-rose-500/10"
+                : "border-white/20 hover:border-purple-500/50 bg-white/5"
             }`}
           >
-            <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx" onChange={handleFileInput} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.pdf,.docx"
+              onChange={handleFileInput}
+              className="hidden"
+            />
             {fileName ? (
               <div>
                 <p className="text-2xl mb-2">✅</p>
@@ -195,21 +358,20 @@ export default function GeneratePage() {
           </div>
         </div>
 
-        {/* Navigation libre : accès direct aux personnages, avec ou sans résumé rempli */}
         <div className="flex flex-col sm:flex-row gap-4">
           <button
-            onClick={() => saveAndGoTo('/characters')}
+            onClick={() => saveAndGoTo("/characters")}
             disabled={!canContinue}
             className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${
               canContinue
-                ? 'bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 cursor-pointer'
-                : 'bg-white/10 text-white/30 cursor-not-allowed'
+                ? "bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 cursor-pointer"
+                : "bg-white/10 text-white/30 cursor-not-allowed"
             }`}
           >
             Continuer vers les personnages →
           </button>
           <button
-            onClick={() => router.push('/characters')}
+            onClick={() => saveAndGoTo("/characters")}
             className="py-4 px-6 rounded-xl font-semibold text-white/70 hover:text-white border border-white/20 hover:border-white/40 transition-colors"
           >
             Passer cette étape
@@ -217,5 +379,19 @@ export default function GeneratePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function GeneratePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
+          <p>Chargement…</p>
+        </main>
+      }
+    >
+      <GenerateContent />
+    </Suspense>
   );
 }
