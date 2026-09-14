@@ -1,28 +1,116 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+
+type CharacterRole = "hero" | "heroine" | "villain" | "side";
 
 type Character = {
   id: string;
   name: string;
+  description?: string;
+  imageUrl?: string;
+  role?: CharacterRole;
+};
+
+type Poster = {
+  id: string;
+  characterIds: string[];
+  description: string;
   imageUrl: string;
+  createdAt: number;
+};
+
+type Video = {
+  id: string;
+  characterId: string;
+  prompt: string;
+  videoUrl?: string;
+  createdAt: number;
+};
+
+type Project = {
+  id: string;
+  title: string;
+  summary: string;
+  genre: string;
+  vibe: string;
+  instructions: string;
+  characters: Character[];
+  posters: Poster[];
+  videos: Video[];
+  currentStep: "summary" | "characters" | "poster" | "video";
+  createdAt: number;
+  updatedAt: number;
 };
 
 type ChatMessage = {
-  role: 'assistant' | 'user';
+  role: "assistant" | "user";
   content: string;
 };
 
-type CreationMode = 'chat' | 'describe' | 'upload';
+type CreationMode = "chat" | "describe" | "upload";
 
-export default function CharactersPage() {
-  const [mode, setMode] = useState<CreationMode>('chat');
-  const [name, setName] = useState('');
-  const [directPrompt, setDirectPrompt] = useState('');
+const STORAGE_KEY = "dark_romance_projects_v1";
+
+function loadProjects(): Project[] {
+  if (typeof window === "undefined") return [];
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+
+  if (!raw) return [];
+
+  try {
+    return JSON.parse(raw) as Project[];
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(projects: Project[]) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+function updateProject(projects: Project[], updated: Project): Project[] {
+  const index = projects.findIndex((project) => project.id === updated.id);
+
+  if (index === -1) {
+    return [updated, ...projects];
+  }
+
+  const copy = [...projects];
+
+  copy[index] = {
+    ...updated,
+    updatedAt: Date.now(),
+  };
+
+  return copy;
+}
+
+/*
+  useSearchParams() doit être dans ce composant interne.
+  Le composant CharactersPage, exporté par défaut plus bas,
+  l'entoure avec Suspense pour que Vercel puisse construire /characters.
+*/
+function CharactersContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const projectId = searchParams.get("projectId");
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+
+  const [mode, setMode] = useState<CreationMode>("chat");
+  const [name, setName] = useState("");
+  const [directPrompt, setDirectPrompt] = useState("");
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState("");
   const [chatStarted, setChatStarted] = useState(false);
   const [finalPrompt, setFinalPrompt] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
@@ -34,29 +122,47 @@ export default function CharactersPage() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const [sceneDescription, setSceneDescription] = useState('');
+  const [sceneDescription, setSceneDescription] = useState("");
   const [composedImage, setComposedImage] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('novel_characters');
+  const characters = project?.characters ?? [];
 
-    if (saved) {
-      try {
-        setCharacters(JSON.parse(saved));
-      } catch {
-        localStorage.removeItem('novel_characters');
-      }
+  useEffect(() => {
+    const projects = loadProjects();
+
+    const selectedProject = projectId
+      ? projects.find((item) => item.id === projectId)
+      : projects[0];
+
+    if (!selectedProject) {
+      router.replace("/");
+      return;
     }
-  }, []);
+
+    setProject(selectedProject);
+    setPageLoading(false);
+  }, [projectId, router]);
+
+  function persistProject(updatedProject: Project) {
+    const projects = loadProjects();
+    const updatedProjects = updateProject(projects, updatedProject);
+
+    saveProjects(updatedProjects);
+    setProject(updatedProject);
+  }
 
   const saveCharacters = (updated: Character[]) => {
-    setCharacters(updated);
-    localStorage.setItem('novel_characters', JSON.stringify(updated));
+    if (!project) return;
+
+    persistProject({
+      ...project,
+      characters: updated,
+      currentStep: "characters",
+    });
   };
 
   const changeMode = (nextMode: CreationMode) => {
@@ -67,15 +173,15 @@ export default function CharactersPage() {
 
   const uploadToStorage = async (file: File): Promise<string> => {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
-    const res = await fetch('/api/upload-image', {
-      method: 'POST',
+    const res = await fetch("/api/upload-image", {
+      method: "POST",
       body: formData,
     });
 
     if (!res.ok) {
-      throw new Error('Upload échoué');
+      throw new Error("Upload échoué");
     }
 
     const data = await res.json();
@@ -88,33 +194,33 @@ export default function CharactersPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/character-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/character-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
             {
-              role: 'user',
-              content: 'Je veux créer un nouveau personnage.',
+              role: "user",
+              content: "Je veux créer un nouveau personnage.",
             },
           ],
         }),
       });
 
       if (!res.ok) {
-        throw new Error('Impossible de démarrer la conversation.');
+        throw new Error("Impossible de démarrer la conversation.");
       }
 
       const data = await res.json();
 
       setChatMessages([
         {
-          role: 'user',
-          content: 'Je veux créer un nouveau personnage.',
+          role: "user",
+          content: "Je veux créer un nouveau personnage.",
         },
         {
-          role: 'assistant',
-          content: data.reply || 'Décris-moi ton personnage.',
+          role: "assistant",
+          content: data.reply || "Décris-moi ton personnage.",
         },
       ]);
     } catch {
@@ -131,25 +237,25 @@ export default function CharactersPage() {
     const updated: ChatMessage[] = [
       ...chatMessages,
       {
-        role: 'user',
+        role: "user",
         content: chatInput.trim(),
       },
     ];
 
     setChatMessages(updated);
-    setChatInput('');
+    setChatInput("");
     setChatLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/character-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/character-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: updated }),
       });
 
       if (!res.ok) {
-        throw new Error('Erreur pendant la conversation.');
+        throw new Error("Erreur pendant la conversation.");
       }
 
       const data = await res.json();
@@ -157,8 +263,8 @@ export default function CharactersPage() {
       setChatMessages([
         ...updated,
         {
-          role: 'assistant',
-          content: data.reply || 'Peux-tu me donner plus de détails ?',
+          role: "assistant",
+          content: data.reply || "Peux-tu me donner plus de détails ?",
         },
       ]);
 
@@ -201,9 +307,9 @@ export default function CharactersPage() {
     description: string,
     referenceImageUrl?: string
   ) => {
-    const res = await fetch('/api/generate-character', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/generate-character", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         description,
         referenceImageUrl,
@@ -212,7 +318,7 @@ export default function CharactersPage() {
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      throw new Error(data?.error || 'Génération échouée');
+      throw new Error(data?.error || "Génération échouée");
     }
 
     const data = await res.json();
@@ -234,7 +340,7 @@ export default function CharactersPage() {
     try {
       await generateCharacter(finalPrompt);
     } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue.');
+      setError(err.message || "Une erreur est survenue.");
     } finally {
       setLoading(false);
     }
@@ -250,7 +356,7 @@ export default function CharactersPage() {
     try {
       await generateCharacter(directPrompt.trim());
     } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue.');
+      setError(err.message || "Une erreur est survenue.");
     } finally {
       setLoading(false);
     }
@@ -267,11 +373,11 @@ export default function CharactersPage() {
       const referenceImageUrl = await uploadToStorage(uploadedFile);
 
       await generateCharacter(
-        'Personnage basé sur la photo fournie. Conserver les traits, le visage, la coiffure et l’identité visuelle de la personne.',
+        "Personnage basé sur la photo fournie. Conserver les traits, le visage, la coiffure et l'identité visuelle de la personne.",
         referenceImageUrl
       );
     } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue.');
+      setError(err.message || "Une erreur est survenue.");
     } finally {
       setLoading(false);
     }
@@ -287,7 +393,7 @@ export default function CharactersPage() {
       const url = await uploadToStorage(uploadedFile);
 
       const newCharacter: Character = {
-        id: `${Date.now()}`,
+        id: crypto.randomUUID(),
         name: name.trim(),
         imageUrl: url,
       };
@@ -302,10 +408,10 @@ export default function CharactersPage() {
   };
 
   const resetForm = () => {
-    setName('');
-    setDirectPrompt('');
+    setName("");
+    setDirectPrompt("");
     setChatMessages([]);
-    setChatInput('');
+    setChatInput("");
     setChatStarted(false);
     setFinalPrompt(null);
     setUploadedFile(null);
@@ -318,7 +424,7 @@ export default function CharactersPage() {
     if (!generatedImage || !name.trim()) return;
 
     const newCharacter: Character = {
-      id: `${Date.now()}`,
+      id: crypto.randomUUID(),
       name: name.trim(),
       imageUrl: generatedImage,
     };
@@ -341,7 +447,7 @@ export default function CharactersPage() {
   };
 
   const handleComposeScene = async () => {
-    if (selectedIds.length === 0 || !sceneDescription.trim()) return;
+    if (!project || selectedIds.length === 0 || !sceneDescription.trim()) return;
 
     setComposing(true);
     setComposeError(null);
@@ -350,11 +456,18 @@ export default function CharactersPage() {
     try {
       const characterImageUrls = characters
         .filter((character) => selectedIds.includes(character.id))
-        .map((character) => character.imageUrl);
+        .map((character) => character.imageUrl)
+        .filter((url): url is string => Boolean(url));
 
-      const res = await fetch('/api/compose-scene', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      if (characterImageUrls.length === 0) {
+        throw new Error(
+          "Les personnages sélectionnés n'ont pas d'image utilisable."
+        );
+      }
+
+      const res = await fetch("/api/compose-scene", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           characterImageUrls,
           sceneDescription,
@@ -363,24 +476,45 @@ export default function CharactersPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || 'Composition échouée');
+        throw new Error(data?.error || "Composition échouée");
       }
 
       const data = await res.json();
       setComposedImage(data.imageUrl);
+
+      const newPoster: Poster = {
+        id: crypto.randomUUID(),
+        characterIds: [...selectedIds],
+        description: sceneDescription,
+        imageUrl: data.imageUrl,
+        createdAt: Date.now(),
+      };
+
+      persistProject({
+        ...project,
+        posters: [...project.posters, newPoster],
+      });
     } catch (err: any) {
-      setComposeError(err.message || 'Une erreur est survenue.');
+      setComposeError(err.message || "Une erreur est survenue.");
     } finally {
       setComposing(false);
     }
   };
+
+  if (pageLoading || !project) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
+        <p>Chargement…</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white">
       <div className="container mx-auto max-w-3xl px-4 py-16">
         <nav className="flex gap-3 mb-10">
           <Link
-            href="/generate"
+            href={`/generate?projectId=${project.id}`}
             className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
           >
             1. Résumé
@@ -391,7 +525,7 @@ export default function CharactersPage() {
           </span>
 
           <Link
-            href="/video"
+            href={`/video?projectId=${project.id}`}
             className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold transition-colors"
           >
             3. Vidéo
@@ -400,39 +534,43 @@ export default function CharactersPage() {
 
         <h1 className="text-4xl font-bold mb-2">👥 Crée tes personnages</h1>
 
-        <p className="text-purple-200 mb-10">
-          Discute avec l’IA, écris ton propre prompt, ou importe directement une photo.
+        <p className="text-purple-200 mb-2">
+          Discute avec l'IA, écris ton propre prompt, ou importe directement une photo.
+        </p>
+
+        <p className="text-xs text-white/40 mb-10">
+          Projet : {project.title || "Sans titre"} • Enregistré automatiquement
         </p>
 
         <div className="grid grid-cols-3 gap-2 mb-8">
           <button
-            onClick={() => changeMode('chat')}
+            onClick={() => changeMode("chat")}
             className={`py-3 px-2 rounded-xl font-semibold text-xs sm:text-sm transition-colors ${
-              mode === 'chat'
-                ? 'bg-rose-600'
-                : 'bg-white/10 hover:bg-white/20 text-white/70'
+              mode === "chat"
+                ? "bg-rose-600"
+                : "bg-white/10 hover:bg-white/20 text-white/70"
             }`}
           >
-            💬 Discuter avec l’IA
+            💬 Discuter avec l'IA
           </button>
 
           <button
-            onClick={() => changeMode('describe')}
+            onClick={() => changeMode("describe")}
             className={`py-3 px-2 rounded-xl font-semibold text-xs sm:text-sm transition-colors ${
-              mode === 'describe'
-                ? 'bg-rose-600'
-                : 'bg-white/10 hover:bg-white/20 text-white/70'
+              mode === "describe"
+                ? "bg-rose-600"
+                : "bg-white/10 hover:bg-white/20 text-white/70"
             }`}
           >
             ✍️ Décrire avec des mots
           </button>
 
           <button
-            onClick={() => changeMode('upload')}
+            onClick={() => changeMode("upload")}
             className={`py-3 px-2 rounded-xl font-semibold text-xs sm:text-sm transition-colors ${
-              mode === 'upload'
-                ? 'bg-rose-600'
-                : 'bg-white/10 hover:bg-white/20 text-white/70'
+              mode === "upload"
+                ? "bg-rose-600"
+                : "bg-white/10 hover:bg-white/20 text-white/70"
             }`}
           >
             📸 Importer une photo
@@ -453,7 +591,7 @@ export default function CharactersPage() {
           />
         </div>
 
-        {mode === 'chat' && (
+        {mode === "chat" && (
           <div className="mb-8">
             {!chatStarted ? (
               <button
@@ -462,8 +600,8 @@ export default function CharactersPage() {
                 className="w-full py-4 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:opacity-50 transition-colors"
               >
                 {chatLoading
-                  ? '💬 Connexion avec l’IA...'
-                  : '💬 Démarrer la conversation'}
+                  ? "💬 Connexion avec l'IA..."
+                  : "💬 Démarrer la conversation"}
               </button>
             ) : (
               <div className="rounded-xl border border-purple-500/20 bg-white/5 p-4">
@@ -472,16 +610,16 @@ export default function CharactersPage() {
                     <div
                       key={index}
                       className={`flex ${
-                        message.role === 'user'
-                          ? 'justify-end'
-                          : 'justify-start'
+                        message.role === "user"
+                          ? "justify-end"
+                          : "justify-start"
                       }`}
                     >
                       <div
                         className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${
-                          message.role === 'user'
-                            ? 'bg-rose-600'
-                            : 'bg-white/10'
+                          message.role === "user"
+                            ? "bg-rose-600"
+                            : "bg-white/10"
                         }`}
                       >
                         {message.content}
@@ -490,7 +628,7 @@ export default function CharactersPage() {
                   ))}
 
                   {chatLoading && (
-                    <p className="text-sm text-white/40">L’IA réfléchit...</p>
+                    <p className="text-sm text-white/40">L'IA réfléchit...</p>
                   )}
                 </div>
 
@@ -501,7 +639,7 @@ export default function CharactersPage() {
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           sendChatMessage();
                         }
                       }}
@@ -526,8 +664,8 @@ export default function CharactersPage() {
                     className="w-full py-3 rounded-lg bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 font-semibold transition-colors disabled:opacity-50"
                   >
                     {loading
-                      ? '✨ Génération en cours...'
-                      : '✨ Générer le personnage'}
+                      ? "✨ Génération en cours..."
+                      : "✨ Générer le personnage"}
                   </button>
                 )}
               </div>
@@ -535,7 +673,7 @@ export default function CharactersPage() {
           </div>
         )}
 
-        {mode === 'describe' && (
+        {mode === "describe" && (
           <div className="mb-8">
             <label className="block text-lg font-semibold mb-3">
               Décris son apparence
@@ -559,13 +697,13 @@ export default function CharactersPage() {
               className="w-full mt-4 py-4 rounded-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 disabled:opacity-30 transition-colors"
             >
               {loading
-                ? '✨ Génération en cours...'
-                : '✨ Générer le personnage'}
+                ? "✨ Génération en cours..."
+                : "✨ Générer le personnage"}
             </button>
           </div>
         )}
 
-        {mode === 'upload' && (
+        {mode === "upload" && (
           <div className="mb-8">
             <div
               onDragOver={(e) => e.preventDefault()}
@@ -612,7 +750,7 @@ export default function CharactersPage() {
                   disabled={loading}
                   className="flex-1 py-3 rounded-xl font-semibold bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Génération...' : 'Styliser avec l’IA'}
+                  {loading ? "Génération..." : "Styliser avec l'IA"}
                 </button>
               </div>
             )}
@@ -631,7 +769,7 @@ export default function CharactersPage() {
 
             <img
               src={generatedImage}
-              alt={name || 'Personnage généré'}
+              alt={name || "Personnage généré"}
               className="max-h-96 mx-auto rounded-lg object-contain mb-4"
             />
 
@@ -668,8 +806,8 @@ export default function CharactersPage() {
                   onClick={() => toggleSelect(character.id)}
                   className={`relative rounded-xl overflow-hidden border-2 cursor-pointer group transition-colors ${
                     selectedIds.includes(character.id)
-                      ? 'border-rose-500'
-                      : 'border-white/10'
+                      ? "border-rose-500"
+                      : "border-white/10"
                   }`}
                 >
                   <img
@@ -711,7 +849,7 @@ export default function CharactersPage() {
 
             <p className="text-sm text-white/50 mb-4">
               {selectedIds.length === 0
-                ? 'Sélectionne un ou plusieurs personnages ci-dessus.'
+                ? "Sélectionne un ou plusieurs personnages ci-dessus."
                 : `${selectedIds.length} personnage(s) sélectionné(s).`}
             </p>
 
@@ -733,8 +871,8 @@ export default function CharactersPage() {
               className="w-full py-3 rounded-xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-30 transition-colors"
             >
               {composing
-                ? '🎨 Composition en cours...'
-                : '🎨 Générer la composition'}
+                ? "🎨 Composition en cours..."
+                : "🎨 Générer la composition"}
             </button>
 
             {composeError && (
@@ -762,16 +900,30 @@ export default function CharactersPage() {
         )}
 
         <Link
-          href="/video"
+          href={`/video?projectId=${project.id}`}
           className={`block text-center py-4 rounded-xl font-bold text-lg transition-all ${
             characters.length > 0
-              ? 'bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500'
-              : 'bg-white/10 text-white/30 pointer-events-none'
+              ? "bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500"
+              : "bg-white/10 text-white/30 pointer-events-none"
           }`}
         >
           Continuer vers la vidéo →
         </Link>
       </div>
     </main>
+  );
+}
+
+export default function CharactersPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
+          <p>Chargement…</p>
+        </main>
+      }
+    >
+      <CharactersContent />
+    </Suspense>
   );
 }
