@@ -311,8 +311,10 @@ function VideoContent() {
               </label>
 
               <p className="mb-3 text-xs text-gray-400">
-                Sélectionne un ou plusieurs personnages. S'il y en a plusieurs, ils
-                seront composés ensemble dans la même image avant l'animation.
+                Clique sur une ou plusieurs photos pour sélectionner les personnages
+                de la scène (contour violet + coche ✓ = sélectionné). S'il y en a
+                plusieurs, ils seront composés ensemble dans la même image avant
+                l'animation.
               </p>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -346,6 +348,13 @@ function VideoContent() {
                   </div>
                 ))}
               </div>
+
+              {selectedIds.length === 0 && (
+                <p className="mt-2 text-sm text-rose-300">
+                  ⚠️ Clique sur au moins une photo ci-dessus pour sélectionner un
+                  personnage.
+                </p>
+              )}
             </div>
 
             <div>
@@ -363,6 +372,12 @@ function VideoContent() {
                 className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white"
                 placeholder={'Décris la scène, l\'action, l\'ambiance… et écris le dialogue directement dedans, par ex. :\n— Tu te trompes de bourreau, répond-il d\'une voix basse.'}
               />
+
+              {!sceneDescription.trim() && (
+                <p className="mt-2 text-sm text-rose-300">
+                  ⚠️ Écris une description de scène ci-dessus pour pouvoir continuer.
+                </p>
+              )}
             </div>
 
             <button
@@ -372,7 +387,11 @@ function VideoContent() {
               }
               className="w-full rounded bg-gray-700 px-4 py-3 font-semibold hover:bg-gray-600 disabled:opacity-30"
             >
-              {composing ? "🎨 Composition en cours..." : "🎨 Composer la scène"}
+              {composing
+                ? "🎨 Composition en cours..."
+                : selectedIds.length === 0 || !sceneDescription.trim()
+                ? "🎨 Sélectionne un personnage et écris la scène pour continuer"
+                : "🎨 Composer la scène"}
             </button>
 
             {composeError && (
