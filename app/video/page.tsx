@@ -8,6 +8,7 @@ type CharacterRole = "hero" | "heroine" | "villain" | "side";
 type AspectRatio = "9:16" | "16:9" | "1:1";
 type Resolution = "480p" | "720p";
 type Duration = "auto" | "5" | "10" | "15" | "20" | "30";
+type Universe = "" | "gothique" | "contemporain" | "fantasy-sombre" | "victorien" | "urbain-moderne";
 
 type Character = {
   id: string;
@@ -86,6 +87,11 @@ function VideoContent() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [resolution, setResolution] = useState<Resolution>("720p");
   const [duration, setDuration] = useState<Duration>("auto");
+  const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
+  const [universe, setUniverse] = useState<Universe>("");
+  const [freePrompt, setFreePrompt] = useState("");
+  const [improvingPrompt, setImprovingPrompt] = useState(false);
+  const [improvePromptError, setImprovePromptError] = useState<string | null>(null);
   const [composedImage, setComposedImage] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
@@ -127,7 +133,52 @@ function VideoContent() {
     "1:1": "Square 1:1 centered composition for Instagram feed.",
   };
 
-  const fullPrompt = `${sceneDescription.trim()} ${aspectPrompt[aspectRatio]}`.trim();
+  const universeLabels: Record<Exclude<Universe, "">, string> = {
+    gothique: "Univers gothique : manoirs, pierre ancienne, brume, clair de lune.",
+    contemporain: "Univers contemporain réaliste, lumière naturelle, décors actuels.",
+    "fantasy-sombre": "Univers fantasy sombre : magie, créatures, paysages surnaturels.",
+    victorien: "Univers victorien : costumes d'époque, intérieurs cossus, chandelles.",
+    "urbain-moderne": "Univers urbain moderne : néons, ville la nuit, ambiance mafia/thriller.",
+  };
+
+  // Le prompt avancé (optionnel) vient s'ajouter au texte de scène, sans jamais
+  // le remplacer : il donne du vocabulaire visuel technique en plus.
+  const fullPrompt = [
+    sceneDescription.trim(),
+    universe ? universeLabels[universe] : "",
+    freePrompt.trim(),
+    aspectPrompt[aspectRatio],
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  const handleImprovePrompt = async () => {
+    if (!freePrompt.trim()) return;
+    setImprovingPrompt(true);
+    setImprovePromptError(null);
+    try {
+      const res = await fetch("/api/improve-scene-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: freePrompt,
+          sceneDescription,
+          universe: universe ? universeLabels[universe] : "",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Amélioration du prompt échouée");
+      }
+      const data = await res.json();
+      if (data.improved) setFreePrompt(data.improved);
+    } catch (err: any) {
+      setImprovePromptError(err.message || "Une erreur est survenue.");
+    } finally {
+      setImprovingPrompt(false);
+    }
+  };
 
   const handleComposeScene = async () => {
     if (!project || selectedIds.length === 0 || !sceneDescription.trim()) return;
@@ -159,7 +210,7 @@ function VideoContent() {
       const res = await fetch("/api/compose-scene", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterImageUrls, sceneDescription: fullPrompt }),
+        body: JSON.stringify({ characterImageUrls, sceneDescription: fullPrompt, aspectRatio }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -312,6 +363,66 @@ function VideoContent() {
                 <p className="mt-2 text-sm text-rose-300">
                   ⚠️ Écris une description de scène ci-dessus pour pouvoir continuer.
                 </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedPrompt((value) => !value)}
+                className="flex w-full items-center justify-between text-left text-sm font-semibold text-gray-200"
+              >
+                <span>🎛️ Prompt avancé (optionnel)</span>
+                <span className="text-xs text-gray-400">{showAdvancedPrompt ? "Réduire ▲" : "Déplier ▼"}</span>
+              </button>
+
+              {showAdvancedPrompt && (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-300">Univers visuel</label>
+                    <select
+                      value={universe}
+                      onChange={(event) => setUniverse(event.target.value as Universe)}
+                      className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-white sm:w-64"
+                    >
+                      <option value="">Aucun (style par défaut)</option>
+                      <option value="gothique">Gothique</option>
+                      <option value="contemporain">Contemporain</option>
+                      <option value="fantasy-sombre">Fantasy sombre</option>
+                      <option value="victorien">Victorien</option>
+                      <option value="urbain-moderne">Urbain moderne</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-300">
+                      Prompt technique libre (mots-clés style, lumière, composition…)
+                    </label>
+                    <textarea
+                      value={freePrompt}
+                      onChange={(event) => setFreePrompt(event.target.value)}
+                      rows={3}
+                      placeholder="Ex : cinematic lighting, moody shadows, close-up, rain on window, teal and crimson palette…"
+                      className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleImprovePrompt}
+                        disabled={!freePrompt.trim() || improvingPrompt}
+                        className="rounded bg-fuchsia-700 px-3 py-1.5 text-xs font-semibold hover:bg-fuchsia-600 disabled:opacity-30"
+                      >
+                        {improvingPrompt ? "✨ Amélioration…" : "✨ Améliorer avec l'IA"}
+                      </button>
+                      {improvePromptError && (
+                        <p className="text-xs text-red-400">{improvePromptError}</p>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Ce texte s'ajoute à ta description de scène, il ne la remplace pas.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
 
