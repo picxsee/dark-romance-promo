@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Logo from "../components/Logo";
 
 type Project = {
   id: string;
@@ -129,7 +130,9 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
       <div className="max-w-4xl mx-auto px-6 py-12">
-        <h1 className="text-4xl font-bold mb-2">Dark Romance Promo</h1>
+        <div className="mb-6">
+          <Logo />
+        </div>
         <p className="text-gray-300 mb-8">
           Crée des visuels vidéo pour promouvoir tes livres de dark romance.
         </p>

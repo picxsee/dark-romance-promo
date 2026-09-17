@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import LogoMark from "./LogoMark";
 
 const DISPLAY_MS = 1600;
 const FADE_MS = 600;
@@ -41,9 +42,7 @@ export default function SplashScreen({ children }: { children: React.ReactNode }
             }`}
             style={{ transitionDuration: "700ms" }}
           >
-            <span className="block text-center text-6xl drop-shadow-[0_0_18px_rgba(244,63,94,0.55)] animate-pulse">
-              🩸
-            </span>
+            <LogoMark size={84} animated={entered} />
           </div>
 
           <h1

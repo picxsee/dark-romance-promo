@@ -8,6 +8,27 @@ body {
   color: #F7F4FF;
 }
 
+/* Battement de coeur réaliste (lub-dub) pour le logo : deux pulsations rapprochées
+   puis un temps de repos, comme un vrai rythme cardiaque plutôt qu'une simple respiration. */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.13); }
+  24% { transform: scale(1); }
+  34% { transform: scale(1.2); }
+  46% { transform: scale(1); }
+}
+@keyframes heartbeat-glow {
+  0%, 100% { filter: drop-shadow(0 0 0px rgba(225,29,72,0)); }
+  12% { filter: drop-shadow(0 0 8px rgba(225,29,72,0.5)); }
+  24% { filter: drop-shadow(0 0 0px rgba(225,29,72,0)); }
+  34% { filter: drop-shadow(0 0 16px rgba(225,29,72,0.65)); }
+  46% { filter: drop-shadow(0 0 0px rgba(225,29,72,0)); }
+}
+.animate-heartbeat {
+  animation: heartbeat 1.6s ease-in-out infinite, heartbeat-glow 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
 @layer components {
   .panel { @apply rounded-3xl border border-white/10 bg-surface/80 backdrop-blur; }
   .field { @apply w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-orchid; }
