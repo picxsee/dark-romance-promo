@@ -1,4 +1,5 @@
 import './globals.css';
+import SplashScreen from '../components/SplashScreen';
 
 export const metadata = {
   title: 'Dark Romance Promo',
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body>{children}</body>
+      <body>
+        <SplashScreen>{children}</SplashScreen>
+      </body>
     </html>
   );
 }
