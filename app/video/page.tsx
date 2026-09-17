@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-type CharacterRole = "hero" | "heroine" | "villain" | "side";
 type AspectRatio = "9:16" | "16:9" | "1:1";
 type Resolution = "480p" | "720p" | "1080p";
 type Duration = "auto" | "5" | "10" | "15" | "20" | "30";
@@ -15,7 +14,6 @@ type Character = {
   name: string;
   description?: string;
   imageUrl?: string;
-  role?: CharacterRole;
 };
 
 type Poster = {

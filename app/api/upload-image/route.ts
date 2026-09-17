@@ -28,14 +28,20 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) {
       console.error('Supabase upload error:', uploadError);
-      return NextResponse.json({ error: "Échec de l'upload" }, { status: 500 });
+      return NextResponse.json(
+        { error: `Échec de l'upload : ${uploadError.message}` },
+        { status: 500 }
+      );
     }
 
     const { data } = supabase.storage.from('character-images').getPublicUrl(fileName);
 
     return NextResponse.json({ url: data.publicUrl });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Upload route error:', error);
-    return NextResponse.json({ error: "Échec de l'upload" }, { status: 500 });
+    return NextResponse.json(
+      { error: `Échec de l'upload : ${error?.message || 'erreur inconnue'}` },
+      { status: 500 }
+    );
   }
 }

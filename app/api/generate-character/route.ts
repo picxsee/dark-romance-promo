@@ -67,11 +67,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       imageUrl,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Nano Banana Pro error:", error);
 
+    const detail =
+      error?.body?.detail ||
+      error?.message ||
+      "Erreur inconnue côté générateur d'image.";
+
     return NextResponse.json(
-      { error: "La génération du personnage a échoué." },
+      { error: `La génération du personnage a échoué : ${detail}` },
       { status: 500 }
     );
   }

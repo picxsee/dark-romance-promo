@@ -42,8 +42,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ imageUrl });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Compose scene error:', error);
-    return NextResponse.json({ error: 'Composition de la scène échouée' }, { status: 500 });
+    const detail =
+      error?.body?.detail || error?.message || 'Erreur inconnue côté générateur d\'image.';
+    return NextResponse.json(
+      { error: `Composition de la scène échouée : ${detail}` },
+      { status: 500 }
+    );
   }
 }

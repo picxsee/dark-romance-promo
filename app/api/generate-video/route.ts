@@ -55,11 +55,14 @@ export async function POST(req: NextRequest) {
       videoUrl,
       seed: result.data?.seed ?? null,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("fal.ai Seedance 2.5 error:", error);
 
+    const detail =
+      error?.body?.detail || error?.message || "Erreur inconnue côté Seedance.";
+
     return NextResponse.json(
-      { error: "Génération vidéo échouée" },
+      { error: `Génération vidéo échouée : ${detail}` },
       { status: 500 }
     );
   }

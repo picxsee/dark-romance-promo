@@ -4,14 +4,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-type CharacterRole = "hero" | "heroine" | "villain" | "side";
-
 type Character = {
   id: string;
   name: string;
   description?: string;
   imageUrl?: string;
-  role?: CharacterRole;
 };
 
 type Poster = {

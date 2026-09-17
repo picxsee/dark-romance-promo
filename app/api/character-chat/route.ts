@@ -45,8 +45,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ reply: displayReply, finalPrompt });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Character chat error:', error);
-    return NextResponse.json({ error: 'Erreur de conversation avec Claude' }, { status: 500 });
+    const detail = error?.error?.message || error?.message || 'erreur inconnue';
+    return NextResponse.json(
+      { error: `Erreur de conversation avec Claude : ${detail}` },
+      { status: 500 }
+    );
   }
 }

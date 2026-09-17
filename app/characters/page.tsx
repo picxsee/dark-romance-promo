@@ -4,14 +4,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-type CharacterRole = "hero" | "heroine" | "villain" | "side";
-
 type Character = {
   id: string;
   name: string;
   description?: string;
   imageUrl?: string;
-  role?: CharacterRole;
 };
 
 type Poster = {
@@ -181,7 +178,8 @@ function CharactersContent() {
     });
 
     if (!res.ok) {
-      throw new Error("Upload échoué");
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || "Upload échoué");
     }
 
     const data = await res.json();
@@ -208,7 +206,8 @@ function CharactersContent() {
       });
 
       if (!res.ok) {
-        throw new Error("Impossible de démarrer la conversation.");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Impossible de démarrer la conversation.");
       }
 
       const data = await res.json();
@@ -223,8 +222,8 @@ function CharactersContent() {
           content: data.reply || "Décris-moi ton personnage.",
         },
       ]);
-    } catch {
-      setError("Impossible de démarrer la conversation avec l'IA.");
+    } catch (err: any) {
+      setError(err.message || "Impossible de démarrer la conversation avec l'IA.");
       setChatStarted(false);
     } finally {
       setChatLoading(false);
@@ -255,7 +254,8 @@ function CharactersContent() {
       });
 
       if (!res.ok) {
-        throw new Error("Erreur pendant la conversation.");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erreur pendant la conversation.");
       }
 
       const data = await res.json();
@@ -271,8 +271,8 @@ function CharactersContent() {
       if (data.finalPrompt) {
         setFinalPrompt(data.finalPrompt);
       }
-    } catch {
-      setError("Erreur pendant la conversation avec l'IA.");
+    } catch (err: any) {
+      setError(err.message || "Erreur pendant la conversation avec l'IA.");
     } finally {
       setChatLoading(false);
     }
@@ -433,7 +433,12 @@ function CharactersContent() {
     resetForm();
   };
 
-  const handleDeleteCharacter = (id: string) => {
+  const handleDeleteCharacter = (id: string, characterName: string) => {
+    const confirmed = window.confirm(
+      `Supprimer définitivement "${characterName || "ce personnage"}" ? Cette action est irréversible.`
+    );
+    if (!confirmed) return;
+
     saveCharacters(characters.filter((c) => c.id !== id));
     setSelectedIds(selectedIds.filter((selectedId) => selectedId !== id));
   };
@@ -829,7 +834,7 @@ function CharactersContent() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteCharacter(character.id);
+                      handleDeleteCharacter(character.id, character.name);
                     }}
                     className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-red-600 text-sm opacity-0 group-hover:opacity-100 transition-opacity"
                   >
