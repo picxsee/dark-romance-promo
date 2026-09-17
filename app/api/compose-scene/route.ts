@@ -15,10 +15,19 @@ export async function POST(req: NextRequest) {
     }
 
     const multiCharacterNote = characterImageUrls.length > 1
-      ? `Place ces ${characterImageUrls.length} personnages ensemble dans la même image, en conservant fidèlement l'apparence de chacun. `
-      : `Place ce personnage dans le décor suivant, en conservant fidèlement son apparence. `;
+      ? `Place ces ${characterImageUrls.length} personnages ensemble dans la même image, en conservant fidèlement le visage, les traits et l'identité visuelle exacte de chacun, comme sur les photos fournies. `
+      : `Place ce personnage dans le décor suivant, en conservant fidèlement son visage, ses traits et son identité visuelle exacte, comme sur la photo fournie. `;
 
-    const enhancedPrompt = `${multiCharacterNote}${sceneDescription}. Style affiche de roman dark romance, cinématique, éclairage dramatique, composition soignée digne d'une couverture de livre, haute qualité.`;
+    // Même exigence de photoréalisme que pour la génération de personnage :
+    // sans ces instructions explicites, le modèle a tendance à sortir un rendu
+    // plus illustratif/stylisé ("affiche") que photo réaliste.
+    const enhancedPrompt = [
+      multiCharacterNote,
+      sceneDescription,
+      "Photographie hyperréaliste, prise de vue cinéma numérique, peau et textures naturelles, grain de peau visible, pas de rendu illustré ni peint ni 3D.",
+      "Éclairage cinématique réaliste et cohérent avec la scène, profondeur de champ naturelle, composition digne d'une photo de plateau pour promo de roman dark romance.",
+      "Ultra détaillé, haute fidélité, aucune déformation du visage.",
+    ].join(" ");
 
     // Le ratio de l'image composée doit correspondre au format vidéo choisi,
     // sinon Seedance reçoit une image dans un cadrage différent de la vidéo demandée.
