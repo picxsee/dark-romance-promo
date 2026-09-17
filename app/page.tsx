@@ -4,99 +4,33 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Logo from "../components/Logo";
+import AuthGuard from "../components/AuthGuard";
+import { supabase } from "../lib/supabaseClient";
+import {
+  Project,
+  createEmptyProject,
+  fetchProjects,
+  saveProject,
+  deleteProject,
+} from "../lib/projects";
 
-type Project = {
-  id: string;
-  title: string;
-  summary: string;
-  genre: string;
-  vibe: string;
-  instructions: string;
-  characters: Character[];
-  posters: Poster[];
-  videos: Video[];
-  currentStep: "summary" | "characters" | "poster" | "video";
-  createdAt: number;
-  updatedAt: number;
-};
-
-type Character = {
-  id: string;
-  name: string;
-  description?: string;
-  imageUrl?: string;
-  role?: "hero" | "heroine" | "villain" | "side";
-};
-
-type Poster = {
-  id: string;
-  characterIds: string[];
-  description: string;
-  imageUrl: string;
-  createdAt: number;
-};
-
-type Video = {
-  id: string;
-  characterId: string;
-  prompt: string;
-  videoUrl?: string;
-  createdAt: number;
-};
-
-const STORAGE_KEY = "dark_romance_projects_v1";
-
-function loadProjects(): Project[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Project[];
-  } catch {
-    return [];
-  }
-}
-
-function saveProjects(projects: Project[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-}
-
-function createEmptyProject(): Project {
-  const now = Date.now();
-  return {
-    id: crypto.randomUUID(),
-    title: "",
-    summary: "",
-    genre: "",
-    vibe: "",
-    instructions: "",
-    characters: [],
-    posters: [],
-    videos: [],
-    currentStep: "summary",
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-export default function HomePage() {
+function HomeContent() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const list = loadProjects();
-    setProjects(list);
-    setLoading(false);
+    fetchProjects().then((list) => {
+      setProjects(list);
+      setLoading(false);
+    });
   }, []);
 
-  const handleNewProject = () => {
+  const handleNewProject = async () => {
     const newProject = createEmptyProject();
-    const updated = [newProject, ...projects];
-    setProjects(updated);
-    saveProjects(updated);
-    // On redirige vers l’étape résumé avec l’ID du projet
+    setProjects([newProject, ...projects]);
+    await saveProject(newProject);
+    // On redirige vers l'étape résumé avec l'ID du projet
     router.push(`/generate?projectId=${newProject.id}`);
   };
 
@@ -111,10 +45,15 @@ export default function HomePage() {
     router.push(`/${page}?projectId=${project.id}`);
   };
 
-  const handleDeleteProject = (id: string) => {
+  const handleDeleteProject = async (id: string) => {
     const updated = projects.filter((p) => p.id !== id);
     setProjects(updated);
-    saveProjects(updated);
+    await deleteProject(id);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/login");
   };
 
   if (loading) {
@@ -130,11 +69,20 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
       <div className="max-w-4xl mx-auto px-6 py-12">
-        <div className="mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <Logo />
+          <button
+            onClick={handleLogout}
+            className="text-sm text-gray-400 hover:text-white underline"
+          >
+            Se déconnecter
+          </button>
         </div>
         <p className="text-gray-300 mb-8">
           Crée des visuels vidéo pour promouvoir tes livres de dark romance.
+        </p>
+        <p className="text-xs text-white/40 mb-8">
+          Tes projets sont enregistrés sur ton compte et retrouvables depuis n'importe quel appareil.
         </p>
 
         {/* Continuer / Nouveau projet */}
@@ -214,5 +162,13 @@ export default function HomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <AuthGuard>
+      <HomeContent />
+    </AuthGuard>
   );
 }

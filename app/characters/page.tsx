@@ -3,44 +3,14 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-
-type Character = {
-  id: string;
-  name: string;
-  description?: string;
-  imageUrl?: string;
-};
-
-type Poster = {
-  id: string;
-  characterIds: string[];
-  description: string;
-  imageUrl: string;
-  createdAt: number;
-};
-
-type Video = {
-  id: string;
-  characterId: string;
-  prompt: string;
-  videoUrl?: string;
-  createdAt: number;
-};
-
-type Project = {
-  id: string;
-  title: string;
-  summary: string;
-  genre: string;
-  vibe: string;
-  instructions: string;
-  characters: Character[];
-  posters: Poster[];
-  videos: Video[];
-  currentStep: "summary" | "characters" | "poster" | "video";
-  createdAt: number;
-  updatedAt: number;
-};
+import AuthGuard from "../../components/AuthGuard";
+import {
+  Project,
+  Character,
+  Poster,
+  fetchProjects,
+  saveProject as saveProjectRemote,
+} from "../../lib/projects";
 
 type ChatMessage = {
   role: "assistant" | "user";
@@ -48,45 +18,6 @@ type ChatMessage = {
 };
 
 type CreationMode = "chat" | "describe" | "upload";
-
-const STORAGE_KEY = "dark_romance_projects_v1";
-
-function loadProjects(): Project[] {
-  if (typeof window === "undefined") return [];
-
-  const raw = localStorage.getItem(STORAGE_KEY);
-
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as Project[];
-  } catch {
-    return [];
-  }
-}
-
-function saveProjects(projects: Project[]) {
-  if (typeof window === "undefined") return;
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-}
-
-function updateProject(projects: Project[], updated: Project): Project[] {
-  const index = projects.findIndex((project) => project.id === updated.id);
-
-  if (index === -1) {
-    return [updated, ...projects];
-  }
-
-  const copy = [...projects];
-
-  copy[index] = {
-    ...updated,
-    updatedAt: Date.now(),
-  };
-
-  return copy;
-}
 
 /*
   useSearchParams() doit être dans ce composant interne.
@@ -129,27 +60,32 @@ function CharactersContent() {
   const characters = project?.characters ?? [];
 
   useEffect(() => {
-    const projects = loadProjects();
+    let cancelled = false;
 
-    const selectedProject = projectId
-      ? projects.find((item) => item.id === projectId)
-      : projects[0];
+    fetchProjects().then((projects) => {
+      if (cancelled) return;
 
-    if (!selectedProject) {
-      router.replace("/");
-      return;
-    }
+      const selectedProject = projectId
+        ? projects.find((item) => item.id === projectId)
+        : projects[0];
 
-    setProject(selectedProject);
-    setPageLoading(false);
+      if (!selectedProject) {
+        router.replace("/");
+        return;
+      }
+
+      setProject(selectedProject);
+      setPageLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, router]);
 
   function persistProject(updatedProject: Project) {
-    const projects = loadProjects();
-    const updatedProjects = updateProject(projects, updatedProject);
-
-    saveProjects(updatedProjects);
     setProject(updatedProject);
+    saveProjectRemote(updatedProject);
   }
 
   const saveCharacters = (updated: Character[]) => {
@@ -921,14 +857,16 @@ function CharactersContent() {
 
 export default function CharactersPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
-          <p>Chargement…</p>
-        </main>
-      }
-    >
-      <CharactersContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense
+        fallback={
+          <main className="min-h-screen bg-gradient-to-br from-rose-950 via-purple-950 to-slate-950 text-white flex items-center justify-center">
+            <p>Chargement…</p>
+          </main>
+        }
+      >
+        <CharactersContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

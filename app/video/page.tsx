@@ -3,75 +3,19 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import AuthGuard from "../../components/AuthGuard";
+import {
+  Project,
+  Poster,
+  Video,
+  fetchProjects,
+  saveProject as saveProjectRemote,
+} from "../../lib/projects";
 
 type AspectRatio = "9:16" | "16:9" | "1:1";
 type Resolution = "480p" | "720p" | "1080p";
 type Duration = "auto" | "5" | "10" | "15" | "20" | "30";
 type Universe = "" | "gothique" | "contemporain" | "fantasy-sombre" | "victorien" | "urbain-moderne";
-
-type Character = {
-  id: string;
-  name: string;
-  description?: string;
-  imageUrl?: string;
-};
-
-type Poster = {
-  id: string;
-  characterIds: string[];
-  description: string;
-  imageUrl: string;
-  createdAt: number;
-};
-
-type Video = {
-  id: string;
-  characterIds: string[];
-  prompt: string;
-  videoUrl?: string;
-  createdAt: number;
-};
-
-type Project = {
-  id: string;
-  title: string;
-  summary: string;
-  genre: string;
-  vibe: string;
-  instructions: string;
-  characters: Character[];
-  posters: Poster[];
-  videos: Video[];
-  currentStep: "summary" | "characters" | "poster" | "video";
-  createdAt: number;
-  updatedAt: number;
-};
-
-const STORAGE_KEY = "dark_romance_projects_v1";
-
-function loadProjects(): Project[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Project[];
-  } catch {
-    return [];
-  }
-}
-
-function saveProjects(projects: Project[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-}
-
-function updateProject(projects: Project[], updated: Project): Project[] {
-  const index = projects.findIndex((project) => project.id === updated.id);
-  if (index === -1) return [updated, ...projects];
-  const copy = [...projects];
-  copy[index] = { ...updated, updatedAt: Date.now() };
-  return copy;
-}
 
 function VideoContent() {
   const searchParams = useSearchParams();
@@ -97,22 +41,30 @@ function VideoContent() {
   const [videoError, setVideoError] = useState<string | null>(null);
 
   useEffect(() => {
-    const projects = loadProjects();
-    const selectedProject = projectId
-      ? projects.find((item) => item.id === projectId)
-      : projects[0];
-    if (!selectedProject) {
-      router.replace("/");
-      return;
-    }
-    setProject(selectedProject);
-    setLoading(false);
+    let cancelled = false;
+
+    fetchProjects().then((projects) => {
+      if (cancelled) return;
+
+      const selectedProject = projectId
+        ? projects.find((item) => item.id === projectId)
+        : projects[0];
+      if (!selectedProject) {
+        router.replace("/");
+        return;
+      }
+      setProject(selectedProject);
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, router]);
 
   function saveProject(updatedProject: Project) {
-    const projects = loadProjects();
-    saveProjects(updateProject(projects, updatedProject));
     setProject(updatedProject);
+    saveProjectRemote(updatedProject);
   }
 
   const toggleSelect = (id: string) => {
@@ -536,14 +488,16 @@ function VideoContent() {
 
 export default function VideoPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
-          <p>Chargement…</p>
-        </div>
-      }
-    >
-      <VideoContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
+            <p>Chargement…</p>
+          </div>
+        }
+      >
+        <VideoContent />
+      </Suspense>
+    </AuthGuard>
   );
 }
