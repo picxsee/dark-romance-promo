@@ -6,7 +6,7 @@ import Link from "next/link";
 
 type CharacterRole = "hero" | "heroine" | "villain" | "side";
 type AspectRatio = "9:16" | "16:9" | "1:1";
-type Resolution = "480p" | "720p";
+type Resolution = "480p" | "720p" | "1080p";
 type Duration = "auto" | "5" | "10" | "15" | "20" | "30";
 type Universe = "" | "gothique" | "contemporain" | "fantasy-sombre" | "victorien" | "urbain-moderne";
 
@@ -85,7 +85,7 @@ function VideoContent() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sceneDescription, setSceneDescription] = useState("");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
-  const [resolution, setResolution] = useState<Resolution>("720p");
+  const [resolution, setResolution] = useState<Resolution>("1080p");
   const [duration, setDuration] = useState<Duration>("auto");
   const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
   const [universe, setUniverse] = useState<Universe>("");
@@ -448,6 +448,7 @@ function VideoContent() {
                 >
                   <option value="480p">480p · Aperçu</option>
                   <option value="720p">720p · Standard</option>
+                  <option value="1080p">1080p · Haute qualité</option>
                 </select>
               </div>
               <div>

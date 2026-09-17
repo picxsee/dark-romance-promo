@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
           resolution,
           duration,
           generate_audio: true,
+          // Encodage haute qualité : meilleure netteté/moins d'artefacts de compression,
+          // surtout sensible en 1080p sur des scènes avec mouvement.
+          bitrate_mode: "high",
         },
         logs: false,
       }
